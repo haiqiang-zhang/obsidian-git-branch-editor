@@ -1,0 +1,173 @@
+/* The graph follows the native Markdown text column in each pane. */
+.hbg-editor, .hbg-reading {
+    position: relative;
+    --hbg-gutter: 0px;
+    --hbg-step: 11px;
+    --hbg-rail: color-mix(in srgb, var(--text-muted) 56%, var(--background-primary));
+    --hbg-node-border: color-mix(in srgb, var(--text-muted) 88%, var(--background-primary));
+    --hbg-node-bg: var(--background-primary);
+    --h1-size: 1.72em;
+    --h2-size: 1.48em;
+    --h3-size: 1.31em;
+    --h4-size: 1.19em;
+    --h5-size: 1.09em;
+    --h6-size: 1em;
+    --h1-weight: 725;
+    --h2-weight: 700;
+    --h3-weight: 680;
+    --h4-weight: 660;
+    --h5-weight: 640;
+    --h6-weight: 625;
+    --h1-line-height: 1.3;
+    --h2-line-height: 1.3;
+    --h3-line-height: 1.35;
+    --h4-line-height: 1.4;
+    --h5-line-height: 1.45;
+    --h6-line-height: 1.45;
+    /* Shared ink for title text, level numbers and the corresponding track. */
+    --hbg-ink-tint: 55%;
+    --hbg-teal: color-mix(in oklab, var(--color-cyan) 86%, var(--color-blue));
+    --hbg-amber: color-mix(in oklab, var(--color-orange) 76%, var(--color-yellow));
+    --hbg-moss: color-mix(in oklab, var(--color-green) 63%, var(--color-yellow));
+    --h1-color: color-mix(in oklab, var(--color-purple) var(--hbg-ink-tint), var(--text-normal));
+    --h2-color: color-mix(in oklab, var(--color-blue) var(--hbg-ink-tint), var(--text-normal));
+    --h3-color: color-mix(in oklab, var(--hbg-teal) var(--hbg-ink-tint), var(--text-normal));
+    --h4-color: color-mix(in oklab, var(--hbg-amber) var(--hbg-ink-tint), var(--text-normal));
+    --h5-color: color-mix(in oklab, var(--color-pink) var(--hbg-ink-tint), var(--text-normal));
+    --h6-color: color-mix(in oklab, var(--hbg-moss) var(--hbg-ink-tint), var(--text-normal));
+    --h6-style: normal;
+    --h6-variant: normal;
+}
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer {
+    padding-inline-start: var(--hbg-gutter);
+}
+.hbg-graph {
+    z-index: 1;
+    pointer-events: none;
+    user-select: none;
+}
+.hbg-level-1 { --hbg-ink: var(--h1-color); }
+.hbg-level-2 { --hbg-ink: var(--h2-color); }
+.hbg-level-3 { --hbg-ink: var(--h3-color); }
+.hbg-level-4 { --hbg-ink: var(--h4-color); }
+.hbg-level-5 { --hbg-ink: var(--h5-color); }
+.hbg-level-6 { --hbg-ink: var(--h6-color); }
+
+.hbg-graph .hbg-depth {
+    fill: var(--hbg-ink);
+    font-family: var(--font-interface);
+    font-size: 10.5px;
+    font-weight: 575;
+    font-variant-numeric: tabular-nums;
+}
+.hbg-graph .hbg-network {
+    stroke: color-mix(in oklab, var(--hbg-ink, var(--text-muted)) 64%, var(--background-primary));
+}
+.hbg-graph .hbg-node {
+    stroke: color-mix(in oklab, var(--hbg-ink) 87%, var(--background-primary));
+    fill: color-mix(in oklab, var(--hbg-ink) 6%, var(--background-primary));
+}
+.hbg-graph .hbg-current-edge { stroke: var(--hbg-ink); }
+.hbg-graph .hbg-node.is-current {
+    fill: var(--hbg-ink);
+    stroke: var(--hbg-ink);
+}
+.hbg-graph .hbg-depth.is-current {
+    font-weight: 725;
+}
+.hbg-editor > .cm-editor > .cm-scroller,
+.hbg-reading > .markdown-preview-view {
+    overscroll-behavior-x: none;
+}
+/* Match the native table widget's negative margin so its editing controls fit
+   inside full-width panes. Readable-line mode keeps its native outer margins. */
+.view-content > .markdown-source-view.mod-cm6.hbg-editor:not(.is-readable-line-width) > .cm-editor > .cm-scroller,
+.hbg-reading > .markdown-preview-view:not(.is-readable-line-width) {
+    padding-inline: max(var(--size-4-4, 16px), var(--safe-area-inset-left, 0px)) max(var(--size-4-4, 16px), var(--safe-area-inset-right, 0px));
+}
+
+/* Reading tables need the same local horizontal scrolling as native editor
+   table widgets and fenced-code blocks. */
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-table {
+    overflow-x: auto;
+}
+
+/* Keep native line numbers outside the graph so shallow headings can still
+   align with their own nodes when line numbers are visible. */
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-gutters-before {
+    translate: calc(-1 * var(--hbg-gutter)) 0;
+}
+
+/* Place each title beside its own node. Wrapped lines keep the same start.
+   The main text and block widgets keep a single, unobstructed column. */
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-1,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h1 > h1 { --hbg-lane: 0; }
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-2,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h2 > h2 { --hbg-lane: 1; }
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-3,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h3 > h3 { --hbg-lane: 2; }
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-4,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h4 > h4 { --hbg-lane: 3; }
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-5,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h5 > h5 { --hbg-lane: 4; }
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-6,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h6 > h6 { --hbg-lane: 5; }
+
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer
+    > :is(.el-h1, .el-h2, .el-h3, .el-h4, .el-h5, .el-h6)
+    > :is(h1, h2, h3, h4, h5, h6) {
+    margin-inline-start: min(0px, calc(33px + var(--hbg-lane) * var(--hbg-step) - var(--hbg-gutter))) !important;
+}
+
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header > .cm-fold-indicator,
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer
+    > div > :is(h1,h2,h3,h4,h5,h6) > .heading-collapse-indicator {
+    visibility: hidden;
+}
+.hbg-toggle {
+    cursor: pointer;
+    pointer-events: all;
+    touch-action: manipulation;
+}
+.hbg-graph .hbg-toggle:is(:hover, :focus-visible) .hbg-node {
+    stroke: var(--hbg-ink);
+    fill: var(--hbg-ink);
+}
+.hbg-toggle:is(:hover, :focus-visible) .hbg-node { r: 5.25px; }
+.hbg-toggle .hbg-action-glyph { stroke: var(--hbg-ink); }
+.hbg-toggle.is-current .hbg-action-glyph { stroke: var(--background-primary); }
+.hbg-toggle:is(:hover, :focus-visible) .hbg-action-glyph { display: inline; stroke: var(--background-primary); }
+.hbg-toggle:focus-visible { outline: none; }
+.hbg-toggle:focus-visible .hbg-node { stroke-width: 2px; }
+
+/* The editable filename starts the graph. Its text shares H1's left edge;
+   an optional title icon moves with the name as one unit. */
+:is(.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer,
+    .hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .mod-header)
+    > :is(.inline-title, .title-wrapper:has(> .inline-title)) {
+    --inline-title-font: var(--h1-font, inherit);
+    --inline-title-color: var(--text-normal);
+    --inline-title-weight: 740;
+    --inline-title-size: 2em;
+    --inline-title-line-height: 1.22;
+    margin-inline-start: calc(var(--hbg-line-area, 0px) + min(0px, 33px - var(--hbg-gutter)));
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+.hbg-graph .hbg-origin {
+    fill: var(--hbg-node-bg);
+    stroke: var(--hbg-node-border);
+    stroke-width: 1.5;
+}
+.hbg-graph .hbg-origin-center { fill: var(--hbg-node-border); }
+
+@media print {
+    .hbg-graph { display: none; }
+    .hbg-editor, .hbg-reading { --hbg-gutter: 0px !important; }
+    .hbg-editor > .cm-editor > .cm-scroller > .cm-sizer,
+    .hbg-reading > .markdown-preview-view > .markdown-preview-sizer {
+        padding-inline-start: 0;
+    }
+}

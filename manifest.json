@@ -1,0 +1,9 @@
+{
+  "id": "git-branch-editor",
+  "name": "git-branch-editor",
+  "version": "1.2.0",
+  "minAppVersion": "1.12.0",
+  "description": "Follow heading ancestry in the editor and reading view with a Git-style branch graph.",
+  "author": "Haiqiang Zhang",
+  "isDesktopOnly": false
+}
