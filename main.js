@@ -50,6 +50,13 @@ var require_interaction = __commonJS({
         if (this.preferred === "focus" && this.focusLine !== null) return this.focusLine;
         return this.pointerLine ?? this.focusLine;
       }
+      activeElement() {
+        return this.svg.getRootNode?.().activeElement ?? this.doc.activeElement;
+      }
+      elementFromPoint(x, y) {
+        const root = this.svg.getRootNode?.();
+        return typeof root?.elementFromPoint === "function" ? root.elementFromPoint(x, y) : this.doc.elementFromPoint(x, y);
+      }
       marker(target) {
         const element = target?.closest?.("g.hbg-toggle[data-line], g.hbg-marker[data-line]");
         return element && this.svg.contains(element) ? element : null;
@@ -126,7 +133,7 @@ var require_interaction = __commonJS({
           this.schedule();
         }
         if (focusLine !== this.focusLine) {
-          const active = this.doc.activeElement;
+          const active = this.activeElement();
           if (focusLine !== null && this.marker(active)) {
             this.restoreFocus = { from: active, line: focusLine };
             this.schedule();
@@ -144,8 +151,9 @@ var require_interaction = __commonJS({
           const restore = this.restoreFocus;
           this.restoreFocus = null;
           if (restore) {
-            const active = this.doc.activeElement;
-            if (active === restore.from || !active || active === this.doc.body || active === this.doc.documentElement || !active.isConnected) {
+            const root = this.svg.getRootNode?.();
+            const active = this.activeElement();
+            if (active === restore.from || !active || active === this.doc.body || active === this.doc.documentElement || !active.isConnected || active === root?.host && !root.activeElement) {
               const target = this.svg.querySelector(`g[data-line="${restore.line}"]`);
               if (target) {
                 this.restoring = true;
@@ -156,12 +164,12 @@ var require_interaction = __commonJS({
                 }
               }
             }
-            this.focusLine = this.line(this.doc.activeElement);
+            this.focusLine = this.line(this.activeElement());
           }
           if (this.checkPointer) {
             this.checkPointer = false;
             const point = this.pointer;
-            this.pointerLine = point && Number.isFinite(point.x + point.y) ? this.line(this.doc.elementFromPoint(point.x, point.y)) : null;
+            this.pointerLine = point && Number.isFinite(point.x + point.y) ? this.line(this.elementFromPoint(point.x, point.y)) : null;
             if (this.pointerLine === null) this.pointer = null;
           }
           const next = this.previewLine;
