@@ -64,11 +64,26 @@
 .hbg-graph .hbg-network {
     stroke: color-mix(in oklab, var(--hbg-ink, var(--text-muted)) 64%, var(--background-primary));
 }
+.hbg-graph.has-active-path .hbg-network {
+    stroke: color-mix(in oklab, var(--hbg-ink, var(--text-muted)) 47%, var(--background-primary));
+}
+.hbg-graph .hbg-active-path {
+    fill: none;
+    stroke: var(--hbg-ink);
+    stroke-width: 2.25px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
 .hbg-graph .hbg-node {
     stroke: color-mix(in oklab, var(--hbg-ink) 87%, var(--background-primary));
     fill: color-mix(in oklab, var(--hbg-ink) 6%, var(--background-primary));
 }
-.hbg-graph .hbg-current-edge { stroke: var(--hbg-ink); }
+.hbg-graph .is-path-ancestor .hbg-node {
+    fill: color-mix(in oklab, var(--hbg-ink) 15%, var(--background-primary));
+    stroke: var(--hbg-ink);
+    stroke-width: 1.75px;
+}
 .hbg-graph .hbg-node.is-current {
     fill: var(--hbg-ink);
     stroke: var(--hbg-ink);
@@ -162,6 +177,7 @@
     stroke-width: 1.5;
 }
 .hbg-graph .hbg-origin-center { fill: var(--hbg-node-border); }
+.hbg-graph .hbg-origin.is-path-ancestor { stroke-width: 1.75px; }
 
 @media print {
     .hbg-graph { display: none; }

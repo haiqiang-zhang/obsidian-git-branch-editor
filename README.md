@@ -1,8 +1,8 @@
 # Obsidian Git Branch Editor
 
-An Obsidian plugin that connects headings with Git-style branch lines. Each of the six heading levels has its own color. Click a node to fold or expand its section in the editor or Reading view.
+An Obsidian plugin that connects headings with Git-style branch lines. Each of the six heading levels has its own color. Hover or focus a node to trace its path from the filename. Click it to fold or expand its section in the editor or Reading view.
 
-<img src="examples/mlsys.webp" alt="Folding and expanding the Pipeline Parallelism branch in MLSys" width="600">
+<img src="examples/mlsys.webp" alt="Tracing the path to Pipeline Parallelism in MLSys, then folding and expanding the section" width="600">
 
 ## Install
 

@@ -22,35 +22,4 @@ function measureFilename(sizer, originClientTop, scaleY = 1) {
     return (firstBox.top - originClientTop) / scaleY + center;
 }
 
-// Join the filename to the first real section, including notes starting at H2–H6.
-// The source line tells us when to continue the trunk through a long introduction.
-function filenameOrigin({ filenameY, first, visible, firstLine, top, bottom, step }) {
-    const result = { path: "", markerY: null };
-    if (!first || !Number.isFinite(filenameY)) return result;
-    if (filenameY >= top - 6 && filenameY <= bottom + 6) result.markerY = filenameY;
-    const firstY = visible.get(first.line);
-    const start = Math.max(top, filenameY);
-    if (start >= bottom) return result;
-    if (!Number.isFinite(firstY)) {
-        if (firstLine < first.line || result.markerY !== null) result.path = `M9 ${start}V${bottom}`;
-        return result;
-    }
-    if (firstY <= start) return result;
-    const x = 9 + (first.level - 1) * step;
-    if (first.level === 1) {
-        result.path = `M9 ${start}V${Math.min(firstY, bottom)}`;
-    } else {
-        const rise = Math.min(firstY - filenameY, 28 + (x - 9) * 0.55);
-        const fork = firstY - rise;
-        if (fork >= bottom) {
-            result.path = `M9 ${start}V${bottom}`;
-        } else {
-            const landing = firstY - Math.min(10, rise * 0.35);
-            const handle = (landing - fork) * 0.54;
-            result.path = `M9 ${Math.min(start, fork)}V${fork}C9 ${fork + handle} ${x} ${landing - handle} ${x} ${landing}V${firstY}`;
-        }
-    }
-    return result;
-}
-
-module.exports = { measureFilename, filenameOrigin };
+module.exports = { measureFilename };
