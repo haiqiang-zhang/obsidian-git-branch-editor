@@ -263,7 +263,9 @@ class EditorGraph {
         const frame = this.layer.measureWindow(sizer);
         const style = this.window.getComputedStyle(this.host);
         const width = parseFloat(style.getPropertyValue('--hbg-gutter')) || 0;
-        const lineArea = Math.max(0, frame.localX(view.contentDOM.getBoundingClientRect().left) - width);
+        const container = view.contentDOM.parentElement;
+        const lineArea = Math.max(0,
+            (view.contentDOM.getBoundingClientRect().left - container.getBoundingClientRect().left) / frame.scaleX);
         const headings = this.expandedHeadings();
         const visible = new Map();
         const folds = new Map();
@@ -293,6 +295,8 @@ class EditorGraph {
         const lastBlock = view.lineBlockAtHeight(Math.max(0, (frame.limitClientBottom - view.documentTop) / frame.scaleY));
         return {
             mount: sizer,
+            fileStart: frame.fileStart,
+            fileEnd: frame.fileEnd,
             left: lineArea,
             top: frame.top,
             width,

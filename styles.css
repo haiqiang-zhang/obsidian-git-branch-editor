@@ -75,10 +75,6 @@
     --h5-color: #af9cde;
     --h6-color: #d0958c;
 }
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer,
-.hbg-reading > .markdown-preview-view > .markdown-preview-sizer {
-    padding-inline-start: var(--hbg-gutter);
-}
 .hbg-graph {
     z-index: 1;
     pointer-events: none;
@@ -154,12 +150,28 @@
 .hbg-editor > .cm-editor > .cm-scroller,
 .hbg-reading > .markdown-preview-view {
     overscroll-behavior-x: none;
+    --hbg-track-start: 0px;
+    --hbg-track-end: 0px;
+    --hbg-note-start: calc(var(--hbg-track-start) + var(--hbg-gutter));
 }
-/* Match the native table widget's negative margin so its editing controls fit
-   inside full-width panes. Readable-line mode keeps its native outer margins. */
+/* Full-width notes use a compact column inside the pane. Compute its offset
+   from the theme's actual scroller padding, including asymmetric margins. */
 .view-content > .markdown-source-view.mod-cm6.hbg-editor:not(.is-readable-line-width) > .cm-editor > .cm-scroller,
 .hbg-reading > .markdown-preview-view:not(.is-readable-line-width) {
-    padding-inline: max(var(--size-4-4, 16px), var(--safe-area-inset-left, 0px)) max(var(--size-4-4, 16px), var(--safe-area-inset-right, 0px));
+    --hbg-compact-start: max(var(--size-4-4, 16px), var(--safe-area-inset-left, 0px));
+    --hbg-compact-end: max(var(--size-4-4, 16px), var(--safe-area-inset-right, 0px));
+    --hbg-track-start: calc(var(--hbg-compact-start) - var(--hbg-file-start, var(--hbg-compact-start)));
+    --hbg-track-end: calc(var(--hbg-compact-end) - var(--hbg-file-end, var(--hbg-compact-end)));
+}
+
+/* Only the note's own blocks use the graph column. The shared sizer also
+   contains independent Obsidian UI, which keeps its native file margins. */
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > :is(.cm-contentContainer, .metadata-container),
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > :is(.mod-header, [class^="el-"], [class*=" el-"]) {
+    margin-inline: var(--hbg-note-start) var(--hbg-track-end);
+}
+.hbg-plane {
+    margin-inline: var(--hbg-track-start, 0px) var(--hbg-track-end, 0px);
 }
 
 /* Reading tables need the same local horizontal scrolling as native editor
@@ -227,9 +239,13 @@
     --inline-title-weight: 740;
     --inline-title-size: 2em;
     --inline-title-line-height: 1.22;
-    margin-inline-start: calc(var(--hbg-line-area, 0px) + min(0px, 33px - var(--hbg-gutter)));
+    margin-inline-start: calc(var(--hbg-title-start, 0px) + var(--hbg-line-area, 0px) + min(0px, 33px - var(--hbg-gutter)));
     min-inline-size: 0;
     overflow-wrap: anywhere;
+}
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > :is(.inline-title, .title-wrapper:has(> .inline-title)) {
+    --hbg-title-start: var(--hbg-note-start);
+    margin-inline-end: var(--hbg-track-end);
 }
 .hbg-graph .hbg-origin {
     fill: var(--hbg-node-bg);
@@ -242,8 +258,9 @@
 @media print {
     .hbg-graph { display: none; }
     .hbg-editor, .hbg-reading { --hbg-gutter: 0px !important; }
-    .hbg-editor > .cm-editor > .cm-scroller > .cm-sizer,
-    .hbg-reading > .markdown-preview-view > .markdown-preview-sizer {
-        padding-inline-start: 0;
+    .hbg-editor > .cm-editor > .cm-scroller,
+    .hbg-reading > .markdown-preview-view {
+        --hbg-track-start: 0px !important;
+        --hbg-track-end: 0px !important;
     }
 }

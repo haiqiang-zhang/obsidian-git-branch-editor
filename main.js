@@ -408,6 +408,7 @@ var require_graph = __commonJS({
       measureWindow(mount) {
         const rect = mount.getBoundingClientRect();
         const scroller = this.scroller;
+        const scrollerStyle = this.doc.defaultView.getComputedStyle(scroller);
         const viewport = scroller.getBoundingClientRect();
         const host = this.host.getBoundingClientRect();
         const scale = (measured, layout) => {
@@ -420,7 +421,6 @@ var require_graph = __commonJS({
         const viewportClientTop = Math.max(host.top, borderTop);
         const viewportClientBottom = Math.min(host.bottom, borderTop + scroller.clientHeight * scaleY);
         const contentTop = rect.top + mount.clientTop * scaleY;
-        const contentLeft = rect.left + mount.clientLeft * scaleX;
         const band = Math.ceil(Math.min(384, Math.max(128, scroller.clientHeight / 3)));
         const firstBand = Math.floor((viewportClientTop - contentTop) / scaleY / band) - 1;
         const lastBand = Math.ceil((viewportClientBottom - contentTop) / scaleY / band) + 1;
@@ -435,7 +435,8 @@ var require_graph = __commonJS({
           scaleY,
           originClientTop: contentTop + top * scaleY,
           limitClientBottom: contentTop + bottom * scaleY,
-          localX: (clientX) => (clientX - contentLeft) / scaleX
+          fileStart: scrollerStyle.paddingInlineStart,
+          fileEnd: scrollerStyle.paddingInlineEnd
         };
       }
       attach(mount) {
@@ -490,9 +491,13 @@ var require_graph = __commonJS({
         const step = this.scroller.clientWidth < 540 ? 8.5 : 11;
         const depth = maxLevel ?? this.index.maxLevel;
         const gutter = depth ? laneX(depth, step) + 27 : 0;
-        if (gutter !== this.gutter || step !== this.step) {
+        if (gutter !== this.gutter || step !== this.step || args.fileStart !== this.fileStart || args.fileEnd !== this.fileEnd) {
           this.gutter = gutter;
           this.step = step;
+          this.fileStart = args.fileStart;
+          this.fileEnd = args.fileEnd;
+          this.host.style.setProperty("--hbg-file-start", this.fileStart ?? "");
+          this.host.style.setProperty("--hbg-file-end", this.fileEnd ?? "");
           this.host.style.setProperty("--hbg-gutter", `${gutter}px`);
           this.host.style.setProperty("--hbg-step", `${step}px`);
           if (!gutter) this.clear();
@@ -795,6 +800,8 @@ var require_graph = __commonJS({
         this.detach();
         this.host.style.removeProperty("--hbg-gutter");
         this.host.style.removeProperty("--hbg-step");
+        this.host.style.removeProperty("--hbg-file-start");
+        this.host.style.removeProperty("--hbg-file-end");
         this.headings = null;
         this.index = null;
       }
@@ -1062,7 +1069,11 @@ var require_editor = __commonJS({
         const frame = this.layer.measureWindow(sizer);
         const style = this.window.getComputedStyle(this.host);
         const width = parseFloat(style.getPropertyValue("--hbg-gutter")) || 0;
-        const lineArea = Math.max(0, frame.localX(view.contentDOM.getBoundingClientRect().left) - width);
+        const container = view.contentDOM.parentElement;
+        const lineArea = Math.max(
+          0,
+          (view.contentDOM.getBoundingClientRect().left - container.getBoundingClientRect().left) / frame.scaleX
+        );
         const headings = this.expandedHeadings();
         const visible = /* @__PURE__ */ new Map();
         const folds = /* @__PURE__ */ new Map();
@@ -1089,6 +1100,8 @@ var require_editor = __commonJS({
         const lastBlock = view.lineBlockAtHeight(Math.max(0, (frame.limitClientBottom - view.documentTop) / frame.scaleY));
         return {
           mount: sizer,
+          fileStart: frame.fileStart,
+          fileEnd: frame.fileEnd,
           left: lineArea,
           top: frame.top,
           width,
@@ -1316,7 +1329,6 @@ var require_reading = __commonJS({
         this.updateSourceCache(renderer);
         const frame = this.layer.measureWindow(sizer);
         if (!frame) return;
-        const sizerRect = sizer.getBoundingClientRect();
         const style = this.window.getComputedStyle(this.host);
         const gutter = parseFloat(style.getPropertyValue("--hbg-gutter")) || 0;
         const step = parseFloat(style.getPropertyValue("--hbg-step")) || 0;
@@ -1389,7 +1401,9 @@ var require_reading = __commonJS({
         if (!Number.isFinite(activeLine)) activeLine = activeSection?.start.line ?? startLine;
         const changed = this.layer.draw({
           mount: sizer,
-          left: frame.localX(sizerRect.left),
+          fileStart: frame.fileStart,
+          fileEnd: frame.fileEnd,
+          left: 0,
           top: frame.top,
           width: gutter,
           height: frame.height,

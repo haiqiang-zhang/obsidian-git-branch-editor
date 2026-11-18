@@ -224,6 +224,7 @@ class GraphLayer {
     measureWindow(mount) {
         const rect = mount.getBoundingClientRect();
         const scroller = this.scroller;
+        const scrollerStyle = this.doc.defaultView.getComputedStyle(scroller);
         const viewport = scroller.getBoundingClientRect();
         const host = this.host.getBoundingClientRect();
         // offsetWidth/Height are integers, so fractional CSS layout can look
@@ -238,7 +239,6 @@ class GraphLayer {
         const viewportClientTop = Math.max(host.top, borderTop);
         const viewportClientBottom = Math.min(host.bottom, borderTop + scroller.clientHeight * scaleY);
         const contentTop = rect.top + mount.clientTop * scaleY;
-        const contentLeft = rect.left + mount.clientLeft * scaleX;
         // Snap the paint window to content coordinates. Small wheel deltas move
         // the existing SVG with the text without replacing its paths and buttons.
         const band = Math.ceil(Math.min(384, Math.max(128, scroller.clientHeight / 3)));
@@ -250,7 +250,8 @@ class GraphLayer {
             top, height: bottom - top, viewportClientTop, viewportClientBottom, scaleX, scaleY,
             originClientTop: contentTop + top * scaleY,
             limitClientBottom: contentTop + bottom * scaleY,
-            localX: (clientX) => (clientX - contentLeft) / scaleX,
+            fileStart: scrollerStyle.paddingInlineStart,
+            fileEnd: scrollerStyle.paddingInlineEnd,
         };
     }
 
@@ -293,9 +294,14 @@ class GraphLayer {
         const step = this.scroller.clientWidth < 540 ? 8.5 : 11;
         const depth = maxLevel ?? this.index.maxLevel;
         const gutter = depth ? laneX(depth, step) + 27 : 0;
-        if (gutter !== this.gutter || step !== this.step) {
+        if (gutter !== this.gutter || step !== this.step
+            || args.fileStart !== this.fileStart || args.fileEnd !== this.fileEnd) {
             this.gutter = gutter;
             this.step = step;
+            this.fileStart = args.fileStart;
+            this.fileEnd = args.fileEnd;
+            this.host.style.setProperty("--hbg-file-start", this.fileStart ?? "");
+            this.host.style.setProperty("--hbg-file-end", this.fileEnd ?? "");
             this.host.style.setProperty("--hbg-gutter", `${gutter}px`);
             this.host.style.setProperty("--hbg-step", `${step}px`);
             if (!gutter) this.clear();
@@ -582,6 +588,8 @@ class GraphLayer {
         this.detach();
         this.host.style.removeProperty("--hbg-gutter");
         this.host.style.removeProperty("--hbg-step");
+        this.host.style.removeProperty("--hbg-file-start");
+        this.host.style.removeProperty("--hbg-file-end");
         this.headings = null;
         this.index = null;
     }

@@ -206,7 +206,6 @@ class ReadingGraph {
 
         const frame = this.layer.measureWindow(sizer);
         if (!frame) return;
-        const sizerRect = sizer.getBoundingClientRect();
         const style = this.window.getComputedStyle(this.host);
         const gutter = parseFloat(style.getPropertyValue("--hbg-gutter")) || 0;
         const step = parseFloat(style.getPropertyValue("--hbg-step")) || 0;
@@ -281,7 +280,9 @@ class ReadingGraph {
 
         const changed = this.layer.draw({
             mount: sizer,
-            left: frame.localX(sizerRect.left),
+            fileStart: frame.fileStart,
+            fileEnd: frame.fileEnd,
+            left: 0,
             top: frame.top,
             width: gutter,
             height: frame.height,
@@ -296,7 +297,7 @@ class ReadingGraph {
             labels,
             filenameY: measureFilename(sizer, frame.originClientTop, frame.scaleY),
         });
-        // Column allocation changes the sizer width and can wrap headings.
+        // Changing the note column can wrap headings and move their nodes.
         if (changed) this.schedule();
     }
 
