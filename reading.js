@@ -54,14 +54,17 @@ class ReadingGraph {
         this.firstLine = 0;
         this.lastLine = 0;
         this.frame = null;
+        this.lastScrollTop = 0;
+        this.scrollBand = 0;
         this.destroyed = false;
         this.schedule = this.schedule.bind(this);
         this.onMutations = this.onMutations.bind(this);
         this.onClick = this.onClick.bind(this);
+        this.onScroll = this.onScroll.bind(this);
 
         host.classList.add("hbg-reading");
         this.unbindPalette = plugin.bindPalette(host);
-        this.layer = new GraphLayer(host, scroller, line => this.toggleFold(line));
+        this.layer = new GraphLayer(host, scroller, line => this.toggleFold(line), { afterNote: true });
         this.mutations = new this.window.MutationObserver(this.onMutations);
         this.mutations.observe(scroller, {
             childList: true,
@@ -77,7 +80,7 @@ class ReadingGraph {
         this.resize = new this.window.ResizeObserver(this.schedule);
         this.resize.observe(host);
         this.resize.observe(scroller);
-        scroller.addEventListener("scroll", this.schedule, { passive: true });
+        scroller.addEventListener("scroll", this.onScroll, { passive: true });
         scroller.addEventListener("click", this.onClick);
         this.schedule();
     }
@@ -85,6 +88,18 @@ class ReadingGraph {
     isReading() {
         return this.view.currentMode === this.view.previewMode
             || this.view.getState?.().mode === "preview";
+    }
+
+    onScroll() {
+        // The native reader has updated its visible sections during this event.
+        // A fast fling can outrun the painted band before the next animation frame.
+        if (this.scrollBand && Math.abs(this.scroller.scrollTop - this.lastScrollTop) >= this.scrollBand) {
+            if (this.frame !== null) this.window.cancelAnimationFrame(this.frame);
+            this.frame = null;
+            this.draw();
+        } else {
+            this.schedule();
+        }
     }
 
     onClick(event) {
@@ -204,8 +219,11 @@ class ReadingGraph {
         // Its section records survive virtual scrolling and duplicate headings.
         this.updateSourceCache(renderer);
 
+        this.layer.attach(sizer);
         const frame = this.layer.measureWindow(sizer);
         if (!frame) return;
+        this.lastScrollTop = this.scroller.scrollTop;
+        this.scrollBand = frame.band;
         const style = this.window.getComputedStyle(this.host);
         const gutter = parseFloat(style.getPropertyValue("--hbg-gutter")) || 0;
         const step = parseFloat(style.getPropertyValue("--hbg-step")) || 0;
@@ -282,7 +300,7 @@ class ReadingGraph {
             mount: sizer,
             fileStart: frame.fileStart,
             fileEnd: frame.fileEnd,
-            left: 0,
+            left: frame.left,
             top: frame.top,
             width: gutter,
             height: frame.height,
@@ -307,7 +325,7 @@ class ReadingGraph {
         if (this.frame !== null) this.window.cancelAnimationFrame(this.frame);
         this.mutations.disconnect();
         this.resize.disconnect();
-        this.scroller.removeEventListener("scroll", this.schedule);
+        this.scroller.removeEventListener("scroll", this.onScroll);
         this.scroller.removeEventListener("click", this.onClick);
         this.layer.destroy();
         this.unbindPalette();

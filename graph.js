@@ -122,17 +122,20 @@ class PathSlice {
 }
 
 class GraphLayer {
-    constructor(host, scroller, onToggle) {
+    constructor(host, scroller, onToggle, { afterNote = false } = {}) {
         this.host = host;
         this.scroller = scroller;
         this.onToggle = onToggle;
+        this.afterNote = afterNote;
         this.doc = host.ownerDocument;
         this.mount = null;
         this.plane = this.doc.createElement("div");
-        this.plane.className = "hbg-plane";
-        // Size strictly to the note. Even a stale slice below a freshly folded
-        // section cannot increase the scroller's scrollHeight or scrollWidth.
-        this.plane.style.cssText = "position:absolute;inset:0;overflow:clip;contain:strict;pointer-events:none;overflow-anchor:none;z-index:1";
+        this.plane.className = afterNote ? "hbg-plane hbg-after-note" : "hbg-plane";
+        // Reading renders upward from a zero-height sibling at the end of the
+        // note. The native virtualizer owns and replaces the sizer's children.
+        const placement = afterNote ? "position:relative;height:0"
+            : "position:absolute;inset:0;overflow:clip;contain:strict";
+        this.plane.style.cssText = placement + ";pointer-events:none;overflow-anchor:none;z-index:1";
         this.svg = svgElement(this.doc, "svg", {
             class: "hbg-graph", role: "group", "aria-label": "标题分支", focusable: "false",
         });
@@ -151,8 +154,11 @@ class GraphLayer {
             if (!button || !this.svg.contains(button)) return;
             if (event.type === "keydown" && !["Enter", " "].includes(event.key)) return;
             if ("button" in event && event.button !== 0) return;
-            // Keep a pointer action in the gutter from moving the editing caret.
-            event.preventDefault();
+            // WebKit needs the touch pointerdown default to synthesize a tap.
+            // Cancel mousedown to keep the editing caret, and fold on click.
+            if (event.type !== "pointerdown" || event.pointerType !== "touch") {
+                event.preventDefault();
+            }
             event.stopPropagation();
             if (event.type === "click" || (event.type === "keydown" && !event.repeat)) {
                 this.onToggle(Number(button.dataset.line));
@@ -246,9 +252,13 @@ class GraphLayer {
         const lastBand = Math.ceil((viewportClientBottom - contentTop) / scaleY / band) + 1;
         const top = Math.min(mount.clientHeight, Math.max(0, firstBand * band));
         const bottom = Math.max(top, Math.min(mount.clientHeight, lastBand * band));
+        const originClientTop = contentTop + top * scaleY;
+        const anchor = this.afterNote ? this.plane.getBoundingClientRect() : null;
         return {
-            top, height: bottom - top, viewportClientTop, viewportClientBottom, scaleX, scaleY,
-            originClientTop: contentTop + top * scaleY,
+            top: anchor ? (originClientTop - anchor.top) / scaleY : top,
+            left: anchor ? (rect.left - anchor.left) / scaleX + mount.clientLeft : 0,
+            height: bottom - top, viewportClientTop, viewportClientBottom, scaleX, scaleY,
+            originClientTop, band,
             limitClientBottom: contentTop + bottom * scaleY,
             fileStart: scrollerStyle.paddingInlineStart,
             fileEnd: scrollerStyle.paddingInlineEnd,
@@ -256,6 +266,10 @@ class GraphLayer {
     }
 
     attach(mount) {
+        if (this.afterNote) {
+            if (mount.nextElementSibling !== this.plane) mount.after(this.plane);
+            return;
+        }
         if (this.mount !== mount) {
             this.detach();
             this.mount = mount;

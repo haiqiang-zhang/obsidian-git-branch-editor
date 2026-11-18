@@ -170,7 +170,7 @@
 .hbg-reading > .markdown-preview-view > .markdown-preview-sizer > :is(.mod-header, [class^="el-"], [class*=" el-"]) {
     margin-inline: var(--hbg-note-start) var(--hbg-track-end);
 }
-.hbg-plane {
+.hbg-plane:not(.hbg-after-note), .hbg-after-note > .hbg-graph {
     margin-inline: var(--hbg-track-start, 0px) var(--hbg-track-end, 0px);
 }
 

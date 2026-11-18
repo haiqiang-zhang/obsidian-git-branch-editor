@@ -313,15 +313,17 @@ var require_graph = __commonJS({
       }
     };
     var GraphLayer = class {
-      constructor(host, scroller, onToggle) {
+      constructor(host, scroller, onToggle, { afterNote = false } = {}) {
         this.host = host;
         this.scroller = scroller;
         this.onToggle = onToggle;
+        this.afterNote = afterNote;
         this.doc = host.ownerDocument;
         this.mount = null;
         this.plane = this.doc.createElement("div");
-        this.plane.className = "hbg-plane";
-        this.plane.style.cssText = "position:absolute;inset:0;overflow:clip;contain:strict;pointer-events:none;overflow-anchor:none;z-index:1";
+        this.plane.className = afterNote ? "hbg-plane hbg-after-note" : "hbg-plane";
+        const placement = afterNote ? "position:relative;height:0" : "position:absolute;inset:0;overflow:clip;contain:strict";
+        this.plane.style.cssText = placement + ";pointer-events:none;overflow-anchor:none;z-index:1";
         this.svg = svgElement(this.doc, "svg", {
           class: "hbg-graph",
           role: "group",
@@ -343,7 +345,9 @@ var require_graph = __commonJS({
           if (!button || !this.svg.contains(button)) return;
           if (event.type === "keydown" && !["Enter", " "].includes(event.key)) return;
           if ("button" in event && event.button !== 0) return;
-          event.preventDefault();
+          if (event.type !== "pointerdown" || event.pointerType !== "touch") {
+            event.preventDefault();
+          }
           event.stopPropagation();
           if (event.type === "click" || event.type === "keydown" && !event.repeat) {
             this.onToggle(Number(button.dataset.line));
@@ -426,20 +430,28 @@ var require_graph = __commonJS({
         const lastBand = Math.ceil((viewportClientBottom - contentTop) / scaleY / band) + 1;
         const top = Math.min(mount.clientHeight, Math.max(0, firstBand * band));
         const bottom = Math.max(top, Math.min(mount.clientHeight, lastBand * band));
+        const originClientTop = contentTop + top * scaleY;
+        const anchor = this.afterNote ? this.plane.getBoundingClientRect() : null;
         return {
-          top,
+          top: anchor ? (originClientTop - anchor.top) / scaleY : top,
+          left: anchor ? (rect.left - anchor.left) / scaleX + mount.clientLeft : 0,
           height: bottom - top,
           viewportClientTop,
           viewportClientBottom,
           scaleX,
           scaleY,
-          originClientTop: contentTop + top * scaleY,
+          originClientTop,
+          band,
           limitClientBottom: contentTop + bottom * scaleY,
           fileStart: scrollerStyle.paddingInlineStart,
           fileEnd: scrollerStyle.paddingInlineEnd
         };
       }
       attach(mount) {
+        if (this.afterNote) {
+          if (mount.nextElementSibling !== this.plane) mount.after(this.plane);
+          return;
+        }
         if (this.mount !== mount) {
           this.detach();
           this.mount = mount;
@@ -1197,13 +1209,16 @@ var require_reading = __commonJS({
         this.firstLine = 0;
         this.lastLine = 0;
         this.frame = null;
+        this.lastScrollTop = 0;
+        this.scrollBand = 0;
         this.destroyed = false;
         this.schedule = this.schedule.bind(this);
         this.onMutations = this.onMutations.bind(this);
         this.onClick = this.onClick.bind(this);
+        this.onScroll = this.onScroll.bind(this);
         host.classList.add("hbg-reading");
         this.unbindPalette = plugin.bindPalette(host);
-        this.layer = new GraphLayer(host, scroller, (line) => this.toggleFold(line));
+        this.layer = new GraphLayer(host, scroller, (line) => this.toggleFold(line), { afterNote: true });
         this.mutations = new this.window.MutationObserver(this.onMutations);
         this.mutations.observe(scroller, {
           childList: true,
@@ -1219,12 +1234,21 @@ var require_reading = __commonJS({
         this.resize = new this.window.ResizeObserver(this.schedule);
         this.resize.observe(host);
         this.resize.observe(scroller);
-        scroller.addEventListener("scroll", this.schedule, { passive: true });
+        scroller.addEventListener("scroll", this.onScroll, { passive: true });
         scroller.addEventListener("click", this.onClick);
         this.schedule();
       }
       isReading() {
         return this.view.currentMode === this.view.previewMode || this.view.getState?.().mode === "preview";
+      }
+      onScroll() {
+        if (this.scrollBand && Math.abs(this.scroller.scrollTop - this.lastScrollTop) >= this.scrollBand) {
+          if (this.frame !== null) this.window.cancelAnimationFrame(this.frame);
+          this.frame = null;
+          this.draw();
+        } else {
+          this.schedule();
+        }
       }
       onClick(event) {
         if (!event.target.closest?.(".heading-collapse-indicator")) return;
@@ -1327,8 +1351,11 @@ var require_reading = __commonJS({
           this.resize.observe(sizer);
         }
         this.updateSourceCache(renderer);
+        this.layer.attach(sizer);
         const frame = this.layer.measureWindow(sizer);
         if (!frame) return;
+        this.lastScrollTop = this.scroller.scrollTop;
+        this.scrollBand = frame.band;
         const style = this.window.getComputedStyle(this.host);
         const gutter = parseFloat(style.getPropertyValue("--hbg-gutter")) || 0;
         const step = parseFloat(style.getPropertyValue("--hbg-step")) || 0;
@@ -1403,7 +1430,7 @@ var require_reading = __commonJS({
           mount: sizer,
           fileStart: frame.fileStart,
           fileEnd: frame.fileEnd,
-          left: 0,
+          left: frame.left,
           top: frame.top,
           width: gutter,
           height: frame.height,
@@ -1426,7 +1453,7 @@ var require_reading = __commonJS({
         if (this.frame !== null) this.window.cancelAnimationFrame(this.frame);
         this.mutations.disconnect();
         this.resize.disconnect();
-        this.scroller.removeEventListener("scroll", this.schedule);
+        this.scroller.removeEventListener("scroll", this.onScroll);
         this.scroller.removeEventListener("click", this.onClick);
         this.layer.destroy();
         this.unbindPalette();
