@@ -4,9 +4,11 @@ An Obsidian plugin that connects headings with Git-style branch lines. Each of t
 
 <img src="examples/mlsys.webp" alt="Tracing the path to Pipeline Parallelism in MLSys, then folding and expanding the section" width="600">
 
-Choose a color palette in **Settings → Git Branch Editor → Color palette**. Keep your theme colors or try a muted palette inspired by [Flexoki](https://stephango.com/flexoki) or [GitHub Primer](https://github.com/primer/primitives/tree/main/src/tokens/base/color).
-
 ## Install
+
+[Install from Obsidian Community Plugins](https://community.obsidian.md/plugins/git-branch-editor) (recommended).
+
+### Manual installation
 
 1. In your vault, create `.obsidian/plugins/git-branch-editor/`.
 2. Copy [main.js](main.js), [manifest.json](manifest.json), and [styles.css](styles.css) into that folder.
