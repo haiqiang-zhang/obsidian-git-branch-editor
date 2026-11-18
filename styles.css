@@ -24,7 +24,12 @@
     --h4-line-height: 1.4;
     --h5-line-height: 1.45;
     --h6-line-height: 1.45;
-    /* Shared ink for title text, level numbers and the corresponding track. */
+    --h6-style: normal;
+    --h6-variant: normal;
+}
+
+/* Headings, graph nodes, and the settings preview share the same six inks. */
+.hbg-editor, .hbg-reading, .hbg-palette-preview {
     --hbg-ink-tint: 55%;
     --hbg-teal: color-mix(in oklab, var(--color-cyan) 86%, var(--color-blue));
     --hbg-amber: color-mix(in oklab, var(--color-orange) 76%, var(--color-yellow));
@@ -35,8 +40,40 @@
     --h4-color: color-mix(in oklab, var(--hbg-amber) var(--hbg-ink-tint), var(--text-normal));
     --h5-color: color-mix(in oklab, var(--color-pink) var(--hbg-ink-tint), var(--text-normal));
     --h6-color: color-mix(in oklab, var(--hbg-moss) var(--hbg-ink-tint), var(--text-normal));
-    --h6-style: normal;
-    --h6-variant: normal;
+}
+
+/* Muted inks adapted from Flexoki and GitHub Primer's light and dimmed scales. */
+:is(.hbg-editor, .hbg-reading, .hbg-palette-preview)[data-hbg-palette="flexoki"] {
+    --h1-color: #89352f;
+    --h2-color: #886c15;
+    --h3-color: #596a1c;
+    --h4-color: #2e6c66;
+    --h5-color: #2b5382;
+    --h6-color: #543f7c;
+}
+.theme-dark :is(.hbg-editor, .hbg-reading, .hbg-palette-preview)[data-hbg-palette="flexoki"] {
+    --h1-color: #d98576;
+    --h2-color: #d3b456;
+    --h3-color: #a7b16e;
+    --h4-color: #76bbac;
+    --h5-color: #7ea6c0;
+    --h6-color: #aba1c5;
+}
+:is(.hbg-editor, .hbg-reading, .hbg-palette-preview)[data-hbg-palette="primer"] {
+    --h1-color: #59636e;
+    --h2-color: #2d66a9;
+    --h3-color: #367250;
+    --h4-color: #7d6531;
+    --h5-color: #7059ac;
+    --h6-color: #945149;
+}
+.theme-dark :is(.hbg-editor, .hbg-reading, .hbg-palette-preview)[data-hbg-palette="primer"] {
+    --h1-color: #adbac7;
+    --h2-color: #7ca9e0;
+    --h3-color: #7eb28b;
+    --h4-color: #bba36e;
+    --h5-color: #af9cde;
+    --h6-color: #d0958c;
 }
 .hbg-editor > .cm-editor > .cm-scroller > .cm-sizer,
 .hbg-reading > .markdown-preview-view > .markdown-preview-sizer {
@@ -53,6 +90,29 @@
 .hbg-level-4 { --hbg-ink: var(--h4-color); }
 .hbg-level-5 { --hbg-ink: var(--h5-color); }
 .hbg-level-6 { --hbg-ink: var(--h6-color); }
+
+.hbg-palette-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--size-4-1) var(--size-4-3);
+    margin-block-start: var(--size-4-2);
+}
+.hbg-palette-preview > span {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--size-4-1);
+    color: var(--hbg-ink);
+    font-size: var(--font-ui-smaller);
+    font-weight: var(--font-medium);
+    font-variant-numeric: tabular-nums;
+}
+.hbg-palette-preview > span::before {
+    content: "";
+    inline-size: 0.6em;
+    block-size: 0.6em;
+    border-radius: 50%;
+    background-color: currentColor;
+}
 
 .hbg-graph .hbg-depth {
     fill: var(--hbg-ink);

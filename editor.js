@@ -61,8 +61,9 @@ function firstHeadingAt(headings, position) {
 }
 
 class EditorGraph {
-    constructor(view) {
+    constructor(view, plugin) {
         this.view = view;
+        this.plugin = plugin;
         this.destroyed = false;
         this.window = view.win;
         this.host = null;
@@ -100,6 +101,7 @@ class EditorGraph {
         this.foldRanges = null;
         this.unfoldedHeadings = [];
         this.host.classList.add('hbg-editor');
+        this.unbindPalette = this.plugin.bindPalette(host);
         this.layer = new GraphLayer(this.host, view.scrollDOM, (line) => this.toggleFold(line));
         this.measureRequest = {
             key: this,
@@ -328,13 +330,14 @@ class EditorGraph {
         this.resizeObserver.disconnect();
         this.view.scrollDOM.removeEventListener('scroll', this.onScroll);
         this.layer.destroy();
+        this.unbindPalette();
         this.host.style.removeProperty('--hbg-line-area');
         this.host.classList.remove('hbg-editor');
     }
 }
 
-function editorExtension() {
-    return ViewPlugin.fromClass(EditorGraph);
+function editorExtension(plugin) {
+    return ViewPlugin.define(view => new EditorGraph(view, plugin));
 }
 
 module.exports = { editorExtension };

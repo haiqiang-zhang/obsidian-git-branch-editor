@@ -39,7 +39,7 @@ function findFoldControl(heading, scroller) {
 }
 
 class ReadingGraph {
-    constructor(view, host, scroller) {
+    constructor(view, host, scroller, plugin) {
         this.view = view;
         this.host = host;
         this.scroller = scroller;
@@ -60,6 +60,7 @@ class ReadingGraph {
         this.onClick = this.onClick.bind(this);
 
         host.classList.add("hbg-reading");
+        this.unbindPalette = plugin.bindPalette(host);
         this.layer = new GraphLayer(host, scroller, line => this.toggleFold(line));
         this.mutations = new this.window.MutationObserver(this.onMutations);
         this.mutations.observe(scroller, {
@@ -308,6 +309,7 @@ class ReadingGraph {
         this.scroller.removeEventListener("scroll", this.schedule);
         this.scroller.removeEventListener("click", this.onClick);
         this.layer.destroy();
+        this.unbindPalette();
         this.host.classList.remove("hbg-reading");
     }
 }
@@ -335,7 +337,7 @@ function registerReading(plugin) {
                 instance = null;
             }
             if (!instance) {
-                instance = new ReadingGraph(view, host, scroller);
+                instance = new ReadingGraph(view, host, scroller, plugin);
                 instances.set(view, instance);
             }
             instance.schedule();

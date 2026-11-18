@@ -885,8 +885,9 @@ var require_editor = __commonJS({
       return low;
     }
     var EditorGraph = class {
-      constructor(view) {
+      constructor(view, plugin) {
         this.view = view;
+        this.plugin = plugin;
         this.destroyed = false;
         this.window = view.win;
         this.host = null;
@@ -921,6 +922,7 @@ var require_editor = __commonJS({
         this.foldRanges = null;
         this.unfoldedHeadings = [];
         this.host.classList.add("hbg-editor");
+        this.unbindPalette = this.plugin.bindPalette(host);
         this.layer = new GraphLayer(this.host, view.scrollDOM, (line) => this.toggleFold(line));
         this.measureRequest = {
           key: this,
@@ -1122,12 +1124,13 @@ var require_editor = __commonJS({
         this.resizeObserver.disconnect();
         this.view.scrollDOM.removeEventListener("scroll", this.onScroll);
         this.layer.destroy();
+        this.unbindPalette();
         this.host.style.removeProperty("--hbg-line-area");
         this.host.classList.remove("hbg-editor");
       }
     };
-    function editorExtension2() {
-      return ViewPlugin.fromClass(EditorGraph);
+    function editorExtension2(plugin) {
+      return ViewPlugin.define((view) => new EditorGraph(view, plugin));
     }
     module2.exports = { editorExtension: editorExtension2 };
   }
@@ -1166,7 +1169,7 @@ var require_reading = __commonJS({
       return heading.querySelector(":scope > .heading-collapse-indicator");
     }
     var ReadingGraph = class {
-      constructor(view, host, scroller) {
+      constructor(view, host, scroller, plugin) {
         this.view = view;
         this.host = host;
         this.scroller = scroller;
@@ -1186,6 +1189,7 @@ var require_reading = __commonJS({
         this.onMutations = this.onMutations.bind(this);
         this.onClick = this.onClick.bind(this);
         host.classList.add("hbg-reading");
+        this.unbindPalette = plugin.bindPalette(host);
         this.layer = new GraphLayer(host, scroller, (line) => this.toggleFold(line));
         this.mutations = new this.window.MutationObserver(this.onMutations);
         this.mutations.observe(scroller, {
@@ -1411,6 +1415,7 @@ var require_reading = __commonJS({
         this.scroller.removeEventListener("scroll", this.schedule);
         this.scroller.removeEventListener("click", this.onClick);
         this.layer.destroy();
+        this.unbindPalette();
         this.host.classList.remove("hbg-reading");
       }
     };
@@ -1435,7 +1440,7 @@ var require_reading = __commonJS({
             instance = null;
           }
           if (!instance) {
-            instance = new ReadingGraph(view, host, scroller);
+            instance = new ReadingGraph(view, host, scroller, plugin);
             instances.set(view, instance);
           }
           instance.schedule();
@@ -1466,13 +1471,122 @@ var require_reading = __commonJS({
   }
 });
 
+// settings.js
+var require_settings = __commonJS({
+  "settings.js"(exports2, module2) {
+    "use strict";
+    var { PluginSettingTab, Setting } = require("obsidian");
+    var DEFAULT_PALETTE2 = "theme";
+    var PALETTES = {
+      theme: "Theme (default)",
+      flexoki: "Flexoki",
+      primer: "GitHub Primer"
+    };
+    function validPalette2(value) {
+      return typeof value === "string" && Object.prototype.hasOwnProperty.call(PALETTES, value);
+    }
+    var BranchSettingsTab2 = class extends PluginSettingTab {
+      constructor(app, plugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+        this.icon = "git-branch";
+      }
+      getSettingDefinitions() {
+        return [{
+          name: "Color palette",
+          desc: "Colors for headings and their branch paths.",
+          aliases: ["heading colors", "Flexoki", "GitHub Primer"],
+          render: (setting) => this.renderPalette(setting)
+        }];
+      }
+      // Obsidian 1.12 uses display(); newer versions index and render the definition.
+      display() {
+        this.containerEl.empty();
+        const [definition] = this.getSettingDefinitions();
+        definition.render(new Setting(this.containerEl).setName(definition.name).setDesc(definition.desc));
+      }
+      renderPalette(setting) {
+        this.preview = setting.descEl.createDiv({ cls: "hbg-palette-preview" });
+        this.preview.setAttribute("aria-hidden", "true");
+        for (let level = 1; level <= 6; level++) {
+          this.preview.createSpan({ cls: `hbg-level-${level}`, text: `H${level}` });
+        }
+        setting.addDropdown((dropdown) => {
+          this.dropdown = dropdown;
+          dropdown.selectEl.setAttribute("aria-label", "Color palette");
+          dropdown.addOptions(PALETTES).onChange((value) => this.plugin.setPalette(value));
+        });
+        this.refreshPalette();
+      }
+      refreshPalette() {
+        const { palette } = this.plugin.settings;
+        if (this.preview) this.preview.dataset.hbgPalette = palette;
+        this.dropdown?.setValue(palette);
+      }
+      hide() {
+        super.hide();
+        this.preview = null;
+        this.dropdown = null;
+      }
+    };
+    module2.exports = { BranchSettingsTab: BranchSettingsTab2, DEFAULT_PALETTE: DEFAULT_PALETTE2, validPalette: validPalette2 };
+  }
+});
+
 // plugin.js
-var { Plugin } = require("obsidian");
+var { Notice, Plugin } = require("obsidian");
 var { editorExtension } = require_editor();
 var { registerReading } = require_reading();
+var { BranchSettingsTab, DEFAULT_PALETTE, validPalette } = require_settings();
 module.exports = class GitBranchEditor extends Plugin {
-  onload() {
-    this.registerEditorExtension(editorExtension());
+  async onload() {
+    this.paletteHosts = /* @__PURE__ */ new Set();
+    this.saveQueue = Promise.resolve();
+    await this.loadSettings();
+    this.paletteTab = new BranchSettingsTab(this.app, this);
+    this.addSettingTab(this.paletteTab);
+    this.registerEditorExtension(editorExtension(this));
     registerReading(this);
+  }
+  async loadSettings() {
+    const before = this.settings;
+    const data = await this.loadData();
+    if (before !== this.settings) return;
+    const palette = validPalette(data?.palette) ? data.palette : DEFAULT_PALETTE;
+    this.savedSettings = { ...data, palette };
+    this.applySettings(this.savedSettings);
+  }
+  bindPalette(host) {
+    this.paletteHosts.add(host);
+    host.dataset.hbgPalette = this.settings.palette;
+    return () => {
+      this.paletteHosts.delete(host);
+      delete host.dataset.hbgPalette;
+    };
+  }
+  applySettings(settings) {
+    this.settings = settings;
+    for (const host of this.paletteHosts) host.dataset.hbgPalette = settings.palette;
+    this.paletteTab?.refreshPalette();
+  }
+  setPalette(palette) {
+    if (!validPalette(palette) || palette === this.settings.palette) return this.saveQueue;
+    const settings = { ...this.settings, palette };
+    this.applySettings(settings);
+    this.saveQueue = this.saveQueue.then(async () => {
+      try {
+        await this.saveData(settings);
+        this.savedSettings = settings;
+      } catch (error) {
+        if (this.settings === settings) this.applySettings(this.savedSettings);
+        new Notice("Git Branch Editor couldn't save the color palette.");
+        console.error("Git Branch Editor could not save the color palette.", error);
+      }
+    });
+    return this.saveQueue;
+  }
+  async onExternalSettingsChange() {
+    await this.saveQueue;
+    await this.loadSettings();
   }
 };
