@@ -186,26 +186,29 @@
     translate: calc(-1 * var(--hbg-gutter)) 0;
 }
 
-/* Place each title beside its own node. Wrapped lines keep the same start.
-   The main text and block widgets keep a single, unobstructed column. */
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-1,
-.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h1 > h1 { --hbg-lane: 0; }
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-2,
-.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h2 > h2 { --hbg-lane: 1; }
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-3,
-.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h3 > h3 { --hbg-lane: 2; }
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-4,
-.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h4 > h4 { --hbg-lane: 3; }
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-5,
-.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h5 > h5 { --hbg-lane: 4; }
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header-6,
-.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > .el-h6 > h6 { --hbg-lane: 5; }
+/* Prose shares its heading's text column. The full graph gutter remains
+   available for deeper nodes elsewhere in the note. */
+.hbg-prose-1, .hbg-editor .HyperMD-header-1, .hbg-reading .el-h1 > h1 { --hbg-lane: 0; }
+.hbg-prose-2, .hbg-editor .HyperMD-header-2, .hbg-reading .el-h2 > h2 { --hbg-lane: 1; }
+.hbg-prose-3, .hbg-editor .HyperMD-header-3, .hbg-reading .el-h3 > h3 { --hbg-lane: 2; }
+.hbg-prose-4, .hbg-editor .HyperMD-header-4, .hbg-reading .el-h4 > h4 { --hbg-lane: 3; }
+.hbg-prose-5, .hbg-editor .HyperMD-header-5, .hbg-reading .el-h5 > h5 { --hbg-lane: 4; }
+.hbg-prose-6, .hbg-editor .HyperMD-header-6, .hbg-reading .el-h6 > h6 { --hbg-lane: 5; }
 
-.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header,
+.hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content
+    > :is(.HyperMD-header, [class*="hbg-prose-"]),
 .hbg-reading > .markdown-preview-view > .markdown-preview-sizer
     > :is(.el-h1, .el-h2, .el-h3, .el-h4, .el-h5, .el-h6)
     > :is(h1, h2, h3, h4, h5, h6) {
-    margin-inline-start: min(0px, calc(33px + var(--hbg-lane) * var(--hbg-step) - var(--hbg-gutter))) !important;
+    --hbg-column-shift: min(0px, calc(33px + var(--hbg-lane) * var(--hbg-step) - var(--hbg-gutter)));
+    margin-inline-start: calc(var(--hbg-column-shift) + var(--hbg-widget-margin, 0px)) !important;
+}
+/* Obsidian offsets table widgets so their drag handles sit outside the text. */
+.hbg-editor .cm-content > .cm-table-widget:not(.is-loading) {
+    --hbg-widget-margin: calc(-1 * var(--size-4-4));
+}
+.hbg-reading > .markdown-preview-view > .markdown-preview-sizer > [class*="hbg-prose-"] {
+    margin-inline-start: calc(var(--hbg-track-start) + min(var(--hbg-gutter), 33px + var(--hbg-lane) * var(--hbg-step)));
 }
 
 .hbg-editor > .cm-editor > .cm-scroller > .cm-sizer > .cm-contentContainer > .cm-content > .HyperMD-header > .cm-fold-indicator,

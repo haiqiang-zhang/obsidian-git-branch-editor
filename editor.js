@@ -1,5 +1,5 @@
-const { ViewPlugin } = require('@codemirror/view');
-const { StateEffect } = require('@codemirror/state');
+const { Decoration, ViewPlugin } = require('@codemirror/view');
+const { RangeSet, StateEffect } = require('@codemirror/state');
 const {
     codeFolding,
     ensureSyntaxTree,
@@ -13,6 +13,8 @@ const {
 } = require('@codemirror/language');
 const { GraphLayer } = require('./graph');
 const { measureFilename } = require('./filename');
+const proseLine = Array.from({ length: 6 }, (_, lane) =>
+    Decoration.line({ class: `hbg-prose-${lane + 1}` }));
 
 function collectHeadings(tree, document) {
     const headings = [];
@@ -60,6 +62,30 @@ function firstHeadingAt(headings, position) {
     return low;
 }
 
+function proseDecorations(view, headings) {
+    if (!headings.length) return Decoration.none;
+    const doc = view.state.doc;
+    const ranges = [];
+    let lastLine = 0;
+    for (const { from, to } of view.visibleRanges) {
+        const first = Math.max(lastLine + 1, doc.lineAt(from).number);
+        lastLine = doc.lineAt(to).number;
+        if (first > lastLine) continue;
+        let position = doc.line(first).from;
+        let index = firstHeadingAt(headings, position);
+        let level = headings[index - 1]?.level ?? 1;
+        for (const text of doc.iterLines(first, lastLine + 1)) {
+            if (headings[index]?.position === position) {
+                level = headings[index++].level;
+            } else {
+                ranges.push(proseLine[level - 1].range(position));
+            }
+            position += text.length + 1;
+        }
+    }
+    return Decoration.set(ranges);
+}
+
 class EditorGraph {
     constructor(view, plugin) {
         this.view = view;
@@ -68,12 +94,15 @@ class EditorGraph {
         this.window = view.win;
         this.host = null;
         this.enabled = false;
+        this.decorations = Decoration.none;
+        this.widgetClasses = new Map();
         this.attachFrame = null;
         this.attach();
         if (!this.enabled) {
             this.attachFrame = this.window.requestAnimationFrame(() => {
                 this.attachFrame = null;
                 this.attach();
+                if (this.decorations.size) this.view.dispatch({});
             });
         }
     }
@@ -114,13 +143,18 @@ class EditorGraph {
         this.resizeObserver.observe(this.host);
         this.resizeObserver.observe(view.contentDOM);
         this.refreshHeadings();
+        this.decorations = proseDecorations(this.view, this.headings);
         this.scheduleMeasure();
     }
 
-    update() {
+    update(update) {
         if (!this.enabled) this.attach();
         if (!this.enabled) return;
+        const previous = this.headings;
         this.refreshHeadings();
+        if (update.docChanged || update.viewportChanged || this.headings !== previous) {
+            this.decorations = proseDecorations(this.view, this.headings);
+        }
         // Folding and replacement decorations can change without changing the text.
         this.scheduleMeasure();
     }
@@ -159,6 +193,11 @@ class EditorGraph {
             this.parseTimer = null;
             if (this.destroyed) return;
             this.refreshHeadings(true);
+            const next = proseDecorations(this.view, this.headings);
+            if (!RangeSet.eq([this.decorations], [next])) {
+                this.decorations = next;
+                this.view.dispatch({});
+            }
             this.scheduleMeasure();
         }, 60);
     }
@@ -268,8 +307,20 @@ class EditorGraph {
             (view.contentDOM.getBoundingClientRect().left - container.getBoundingClientRect().left) / frame.scaleX);
         const headings = this.expandedHeadings();
         const visible = new Map();
+        const headingTops = new Map();
         const folds = new Map();
         const labels = new Map();
+        // Live Preview block replacements sit beside native lines and cannot
+        // receive line decorations. Only inspect the note's mounted widgets.
+        const widgets = new Map();
+        if (this.headings.length) {
+            const selector = ':scope > :is(.cm-embed-block, .cm-table-widget, .cm-html-embed, .cm-preview-code-block):not(.cm-line)';
+            for (const widget of view.contentDOM.querySelectorAll(selector)) {
+                const position = view.posAtDOM(widget);
+                const index = firstHeadingAt(this.headings, position + 1) - 1;
+                widgets.set(widget, `hbg-prose-${this.headings[index]?.level ?? 1}`);
+            }
+        }
 
         for (const range of view.visibleRanges) {
             let index = firstHeadingAt(headings, range.from);
@@ -277,6 +328,7 @@ class EditorGraph {
                 const heading = headings[index];
                 const coordinates = view.coordsAtPos(heading.position, 1);
                 if (coordinates) {
+                    headingTops.set(heading.line, (coordinates.top - frame.originClientTop) / frame.scaleY);
                     visible.set(heading.line,
                         ((coordinates.top + coordinates.bottom) / 2 - frame.originClientTop) / frame.scaleY);
                     const fold = this.headingFold(heading);
@@ -309,6 +361,8 @@ class EditorGraph {
             endLine: view.state.doc.lineAt(Math.min(lastBlock.to, view.viewport.to)).number - 1,
             activeLine: view.state.doc.lineAt(view.state.selection.main.head).number - 1,
             visible,
+            headingTops,
+            widgets,
             folds,
             labels,
         };
@@ -316,6 +370,13 @@ class EditorGraph {
 
     paint(geometry) {
         if (this.destroyed || !geometry) return;
+        for (const [widget, name] of this.widgetClasses) {
+            if (geometry.widgets.get(widget) !== name) widget.classList.remove(name);
+        }
+        for (const [widget, name] of geometry.widgets) {
+            if (!widget.classList.contains(name)) widget.classList.add(name);
+        }
+        this.widgetClasses = geometry.widgets;
         if (geometry.lineArea !== this.lineArea) {
             this.lineArea = geometry.lineArea;
             this.host.style.setProperty('--hbg-line-area', `${this.lineArea}px`);
@@ -331,6 +392,8 @@ class EditorGraph {
         }
         if (!this.enabled) return;
         this.cancelParse();
+        for (const [widget, name] of this.widgetClasses) widget.classList.remove(name);
+        this.widgetClasses.clear();
         this.resizeObserver.disconnect();
         this.view.scrollDOM.removeEventListener('scroll', this.onScroll);
         this.layer.destroy();
@@ -341,7 +404,9 @@ class EditorGraph {
 }
 
 function editorExtension(plugin) {
-    return ViewPlugin.define(view => new EditorGraph(view, plugin));
+    return ViewPlugin.define(view => new EditorGraph(view, plugin), {
+        decorations: instance => instance.decorations,
+    });
 }
 
 module.exports = { editorExtension };

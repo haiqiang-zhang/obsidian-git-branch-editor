@@ -274,10 +274,14 @@ var require_graph = __commonJS({
       }
       return ordered[Math.max(0, low - 1)];
     }
-    function forkGeometry(fromLevel, level, y, previousY, step) {
+    function forkGeometry(fromLevel, level, y, previousY, step, headingTop) {
       const span = (level - fromLevel) * step;
       const desiredRise = 10 + Math.min(38, 16 + span * 0.6);
-      const rise = Number.isFinite(previousY) ? Math.min(desiredRise, Math.max(0, y - previousY - 4)) : desiredRise;
+      const startLimit = Math.max(
+        Number.isFinite(previousY) ? previousY + 4 : -Infinity,
+        headingTop ?? -Infinity
+      );
+      const rise = Math.min(desiredRise, Math.max(0, y - startLimit));
       const start = y - rise;
       const landing = y - Math.min(10, rise * 0.41);
       const handle = (landing - start) * 0.54;
@@ -554,7 +558,9 @@ var require_graph = __commonJS({
           if (Number.isFinite(y) && node.level !== fromLevel) {
             const previous = ordered[node.index - 1];
             const previousY = previous ? visible.get(previous.line) : originY;
-            segment = forkGeometry(fromLevel, node.level, y, previousY, step);
+            const crossesProse = node.level - (previous?.level ?? 1) >= 2;
+            const headingTop = crossesProse ? args.headingTops.get(node.line) : void 0;
+            segment = forkGeometry(fromLevel, node.level, y, previousY, step, headingTop);
           }
           forks.set(node, segment);
           return segment;
@@ -849,8 +855,8 @@ var require_filename = __commonJS({
 // editor.js
 var require_editor = __commonJS({
   "editor.js"(exports2, module2) {
-    var { ViewPlugin } = require("@codemirror/view");
-    var { StateEffect } = require("@codemirror/state");
+    var { Decoration, ViewPlugin } = require("@codemirror/view");
+    var { RangeSet, StateEffect } = require("@codemirror/state");
     var {
       codeFolding,
       ensureSyntaxTree,
@@ -864,6 +870,7 @@ var require_editor = __commonJS({
     } = require("@codemirror/language");
     var { GraphLayer } = require_graph();
     var { measureFilename } = require_filename();
+    var proseLine = Array.from({ length: 6 }, (_, lane) => Decoration.line({ class: `hbg-prose-${lane + 1}` }));
     function collectHeadings(tree, document) {
       const headings = [];
       const lines = /* @__PURE__ */ new Set();
@@ -903,6 +910,29 @@ var require_editor = __commonJS({
       }
       return low;
     }
+    function proseDecorations(view, headings) {
+      if (!headings.length) return Decoration.none;
+      const doc = view.state.doc;
+      const ranges = [];
+      let lastLine = 0;
+      for (const { from, to } of view.visibleRanges) {
+        const first = Math.max(lastLine + 1, doc.lineAt(from).number);
+        lastLine = doc.lineAt(to).number;
+        if (first > lastLine) continue;
+        let position = doc.line(first).from;
+        let index = firstHeadingAt(headings, position);
+        let level = headings[index - 1]?.level ?? 1;
+        for (const text of doc.iterLines(first, lastLine + 1)) {
+          if (headings[index]?.position === position) {
+            level = headings[index++].level;
+          } else {
+            ranges.push(proseLine[level - 1].range(position));
+          }
+          position += text.length + 1;
+        }
+      }
+      return Decoration.set(ranges);
+    }
     var EditorGraph = class {
       constructor(view, plugin) {
         this.view = view;
@@ -911,12 +941,15 @@ var require_editor = __commonJS({
         this.window = view.win;
         this.host = null;
         this.enabled = false;
+        this.decorations = Decoration.none;
+        this.widgetClasses = /* @__PURE__ */ new Map();
         this.attachFrame = null;
         this.attach();
         if (!this.enabled) {
           this.attachFrame = this.window.requestAnimationFrame(() => {
             this.attachFrame = null;
             this.attach();
+            if (this.decorations.size) this.view.dispatch({});
           });
         }
       }
@@ -954,12 +987,17 @@ var require_editor = __commonJS({
         this.resizeObserver.observe(this.host);
         this.resizeObserver.observe(view.contentDOM);
         this.refreshHeadings();
+        this.decorations = proseDecorations(this.view, this.headings);
         this.scheduleMeasure();
       }
-      update() {
+      update(update) {
         if (!this.enabled) this.attach();
         if (!this.enabled) return;
+        const previous = this.headings;
         this.refreshHeadings();
+        if (update.docChanged || update.viewportChanged || this.headings !== previous) {
+          this.decorations = proseDecorations(this.view, this.headings);
+        }
         this.scheduleMeasure();
       }
       refreshHeadings(force = false) {
@@ -992,6 +1030,11 @@ var require_editor = __commonJS({
           this.parseTimer = null;
           if (this.destroyed) return;
           this.refreshHeadings(true);
+          const next = proseDecorations(this.view, this.headings);
+          if (!RangeSet.eq([this.decorations], [next])) {
+            this.decorations = next;
+            this.view.dispatch({});
+          }
           this.scheduleMeasure();
         }, 60);
       }
@@ -1088,14 +1131,25 @@ var require_editor = __commonJS({
         );
         const headings = this.expandedHeadings();
         const visible = /* @__PURE__ */ new Map();
+        const headingTops = /* @__PURE__ */ new Map();
         const folds = /* @__PURE__ */ new Map();
         const labels = /* @__PURE__ */ new Map();
+        const widgets = /* @__PURE__ */ new Map();
+        if (this.headings.length) {
+          const selector = ":scope > :is(.cm-embed-block, .cm-table-widget, .cm-html-embed, .cm-preview-code-block):not(.cm-line)";
+          for (const widget of view.contentDOM.querySelectorAll(selector)) {
+            const position = view.posAtDOM(widget);
+            const index = firstHeadingAt(this.headings, position + 1) - 1;
+            widgets.set(widget, `hbg-prose-${this.headings[index]?.level ?? 1}`);
+          }
+        }
         for (const range of view.visibleRanges) {
           let index = firstHeadingAt(headings, range.from);
           while (index < headings.length && headings[index].position <= range.to) {
             const heading = headings[index];
             const coordinates = view.coordsAtPos(heading.position, 1);
             if (coordinates) {
+              headingTops.set(heading.line, (coordinates.top - frame.originClientTop) / frame.scaleY);
               visible.set(
                 heading.line,
                 ((coordinates.top + coordinates.bottom) / 2 - frame.originClientTop) / frame.scaleY
@@ -1126,12 +1180,21 @@ var require_editor = __commonJS({
           endLine: view.state.doc.lineAt(Math.min(lastBlock.to, view.viewport.to)).number - 1,
           activeLine: view.state.doc.lineAt(view.state.selection.main.head).number - 1,
           visible,
+          headingTops,
+          widgets,
           folds,
           labels
         };
       }
       paint(geometry) {
         if (this.destroyed || !geometry) return;
+        for (const [widget, name] of this.widgetClasses) {
+          if (geometry.widgets.get(widget) !== name) widget.classList.remove(name);
+        }
+        for (const [widget, name] of geometry.widgets) {
+          if (!widget.classList.contains(name)) widget.classList.add(name);
+        }
+        this.widgetClasses = geometry.widgets;
         if (geometry.lineArea !== this.lineArea) {
           this.lineArea = geometry.lineArea;
           this.host.style.setProperty("--hbg-line-area", `${this.lineArea}px`);
@@ -1146,6 +1209,8 @@ var require_editor = __commonJS({
         }
         if (!this.enabled) return;
         this.cancelParse();
+        for (const [widget, name] of this.widgetClasses) widget.classList.remove(name);
+        this.widgetClasses.clear();
         this.resizeObserver.disconnect();
         this.view.scrollDOM.removeEventListener("scroll", this.onScroll);
         this.layer.destroy();
@@ -1155,7 +1220,9 @@ var require_editor = __commonJS({
       }
     };
     function editorExtension2(plugin) {
-      return ViewPlugin.define((view) => new EditorGraph(view, plugin));
+      return ViewPlugin.define((view) => new EditorGraph(view, plugin), {
+        decorations: (instance) => instance.decorations
+      });
     }
     module2.exports = { editorExtension: editorExtension2 };
   }
@@ -1173,6 +1240,14 @@ var require_reading = __commonJS({
     }
     function isHeadingSection(section) {
       return section.level >= 1 && section.level <= 6;
+    }
+    function setProseClass(section, oldClass, newClass) {
+      if (oldClass === newClass) return false;
+      if (oldClass) section.el.classList.remove(oldClass);
+      if (newClass) section.el.classList.add(newClass);
+      if (!section.computed) return false;
+      section.resetCompute?.();
+      return true;
     }
     function stableOutline(previous, next) {
       return previous.length === next.length && next.every(
@@ -1204,7 +1279,7 @@ var require_reading = __commonJS({
         this.headingByLine = /* @__PURE__ */ new Map();
         this.maxLevel = 0;
         this.cachedSections = null;
-        this.sectionByElement = /* @__PURE__ */ new WeakMap();
+        this.sectionByElement = /* @__PURE__ */ new Map();
         this.sourceCacheDirty = true;
         this.firstLine = 0;
         this.lastLine = 0;
@@ -1316,27 +1391,41 @@ var require_reading = __commonJS({
         if (!this.sourceCacheDirty && this.cachedSections === sections) return;
         this.cachedSections = sections;
         this.sourceCacheDirty = false;
-        this.sectionByElement = /* @__PURE__ */ new WeakMap();
+        const previous = this.sectionByElement;
+        this.sectionByElement = /* @__PURE__ */ new Map();
         this.headingByLine = /* @__PURE__ */ new Map();
         this.maxLevel = 0;
         this.firstLine = Infinity;
         this.lastLine = 0;
         const headings = [];
+        let ownerLevel = 1;
+        let remeasure = false;
         for (const section of sections) {
+          if (section === renderer.header || section === renderer.footer || section.el?.matches(".mod-ui")) continue;
           if (!hasSourcePosition(section)) continue;
           const shown = section.shown !== false;
-          if (section.el) this.sectionByElement.set(section.el, { section, shown });
-          if (isHeadingSection(section)) {
+          const heading = isHeadingSection(section);
+          if (heading) {
+            ownerLevel = section.level;
             this.maxLevel = Math.max(this.maxLevel, section.level);
             if (shown) {
               headings.push({ level: section.level, line: section.start.line });
               this.headingByLine.set(section.start.line, section);
             }
           }
+          if (section.el) {
+            const proseClass = heading ? null : `hbg-prose-${ownerLevel}`;
+            const oldClass = previous.get(section.el)?.proseClass ?? null;
+            if (setProseClass(section, oldClass, proseClass)) remeasure = true;
+            this.sectionByElement.set(section.el, { section, shown, proseClass });
+            previous.delete(section.el);
+          }
           if (!shown) continue;
           this.firstLine = Math.min(this.firstLine, section.start.line);
           this.lastLine = Math.max(this.lastLine, section.end.line);
         }
+        for (const { section, proseClass } of previous.values()) setProseClass(section, proseClass, null);
+        if (remeasure) renderer.queueRender?.();
         if (!Number.isFinite(this.firstLine)) this.firstLine = 0;
         this.headings = stableOutline(this.headings, headings);
       }
@@ -1360,6 +1449,7 @@ var require_reading = __commonJS({
         const gutter = parseFloat(style.getPropertyValue("--hbg-gutter")) || 0;
         const step = parseFloat(style.getPropertyValue("--hbg-step")) || 0;
         const visible = /* @__PURE__ */ new Map();
+        const headingTops = /* @__PURE__ */ new Map();
         const folds = /* @__PURE__ */ new Map();
         const labels = /* @__PURE__ */ new Map();
         let startLine = Infinity;
@@ -1409,10 +1499,9 @@ var require_reading = __commonJS({
           const lineHeight = parseFloat(headingStyle.lineHeight) || parseFloat(headingStyle.fontSize) * 1.4;
           const paddingTop = parseFloat(headingStyle.paddingTop) || 0;
           const borderTop = parseFloat(headingStyle.borderTopWidth) || 0;
-          visible.set(
-            section.start.line,
-            (headingRect.top - frame.originClientTop) / frame.scaleY + paddingTop + borderTop + lineHeight / 2
-          );
+          const firstLineTop = (headingRect.top - frame.originClientTop) / frame.scaleY + paddingTop + borderTop;
+          headingTops.set(section.start.line, firstLineTop);
+          visible.set(section.start.line, firstLineTop + lineHeight / 2);
           labels.set(
             section.start.line,
             heading.getAttribute("data-heading") ?? heading.textContent.trim()
@@ -1441,6 +1530,7 @@ var require_reading = __commonJS({
           endLine,
           activeLine,
           visible,
+          headingTops,
           folds,
           labels,
           filenameY: measureFilename(sizer, frame.originClientTop, frame.scaleY)
@@ -1455,9 +1545,15 @@ var require_reading = __commonJS({
         this.resize.disconnect();
         this.scroller.removeEventListener("scroll", this.onScroll);
         this.scroller.removeEventListener("click", this.onClick);
+        let remeasure = false;
+        for (const { section, proseClass } of this.sectionByElement.values()) {
+          if (setProseClass(section, proseClass, null)) remeasure = true;
+        }
+        this.sectionByElement.clear();
         this.layer.destroy();
         this.unbindPalette();
         this.host.classList.remove("hbg-reading");
+        if (remeasure && this.isReading() && this.host.isConnected) this.view.previewMode?.renderer?.queueRender?.();
       }
     };
     function registerReading2(plugin) {
@@ -1497,7 +1593,10 @@ var require_reading = __commonJS({
       }
       plugin.registerMarkdownPostProcessor((_element, context) => {
         for (const [view, instance] of instances) {
-          if (view.file?.path === context.sourcePath) instance.schedule();
+          if (view.file?.path !== context.sourcePath || !instance.isReading()) continue;
+          const renderer = view.previewMode?.renderer;
+          if (renderer) instance.updateSourceCache(renderer);
+          instance.schedule();
         }
       });
       plugin.register(() => {

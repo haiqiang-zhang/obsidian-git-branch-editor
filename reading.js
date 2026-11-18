@@ -13,6 +13,16 @@ function isHeadingSection(section) {
     return section.level >= 1 && section.level <= 6;
 }
 
+function setProseClass(section, oldClass, newClass) {
+    if (oldClass === newClass) return false;
+    if (oldClass) section.el.classList.remove(oldClass);
+    if (newClass) section.el.classList.add(newClass);
+    if (!section.computed) return false;
+    // Rewrapping paragraphs can invalidate the native virtualizer's cached height.
+    section.resetCompute?.();
+    return true;
+}
+
 function stableOutline(previous, next) {
     return previous.length === next.length && next.every((item, index) =>
         item.line === previous[index].line && item.level === previous[index].level
@@ -49,7 +59,7 @@ class ReadingGraph {
         this.headingByLine = new Map();
         this.maxLevel = 0;
         this.cachedSections = null;
-        this.sectionByElement = new WeakMap();
+        this.sectionByElement = new Map();
         this.sourceCacheDirty = true;
         this.firstLine = 0;
         this.lastLine = 0;
@@ -178,27 +188,41 @@ class ReadingGraph {
 
         this.cachedSections = sections;
         this.sourceCacheDirty = false;
-        this.sectionByElement = new WeakMap();
+        const previous = this.sectionByElement;
+        this.sectionByElement = new Map();
         this.headingByLine = new Map();
         this.maxLevel = 0;
         this.firstLine = Infinity;
         this.lastLine = 0;
         const headings = [];
+        let ownerLevel = 1;
+        let remeasure = false;
         for (const section of sections) {
+            if (section === renderer.header || section === renderer.footer || section.el?.matches(".mod-ui")) continue;
             if (!hasSourcePosition(section)) continue;
             const shown = section.shown !== false;
-            if (section.el) this.sectionByElement.set(section.el, { section, shown });
-            if (isHeadingSection(section)) {
+            const heading = isHeadingSection(section);
+            if (heading) {
+                ownerLevel = section.level;
                 this.maxLevel = Math.max(this.maxLevel, section.level);
                 if (shown) {
                     headings.push({ level: section.level, line: section.start.line });
                     this.headingByLine.set(section.start.line, section);
                 }
             }
+            if (section.el) {
+                const proseClass = heading ? null : `hbg-prose-${ownerLevel}`;
+                const oldClass = previous.get(section.el)?.proseClass ?? null;
+                if (setProseClass(section, oldClass, proseClass)) remeasure = true;
+                this.sectionByElement.set(section.el, { section, shown, proseClass });
+                previous.delete(section.el);
+            }
             if (!shown) continue;
             this.firstLine = Math.min(this.firstLine, section.start.line);
             this.lastLine = Math.max(this.lastLine, section.end.line);
         }
+        for (const { section, proseClass } of previous.values()) setProseClass(section, proseClass, null);
+        if (remeasure) renderer.queueRender?.();
         if (!Number.isFinite(this.firstLine)) this.firstLine = 0;
         this.headings = stableOutline(this.headings, headings);
     }
@@ -228,6 +252,7 @@ class ReadingGraph {
         const gutter = parseFloat(style.getPropertyValue("--hbg-gutter")) || 0;
         const step = parseFloat(style.getPropertyValue("--hbg-step")) || 0;
         const visible = new Map();
+        const headingTops = new Map();
         const folds = new Map();
         const labels = new Map();
         let startLine = Infinity;
@@ -277,10 +302,9 @@ class ReadingGraph {
                 || parseFloat(headingStyle.fontSize) * 1.4;
             const paddingTop = parseFloat(headingStyle.paddingTop) || 0;
             const borderTop = parseFloat(headingStyle.borderTopWidth) || 0;
-            visible.set(section.start.line,
-                (headingRect.top - frame.originClientTop) / frame.scaleY
-                    + paddingTop + borderTop + lineHeight / 2
-            );
+            const firstLineTop = (headingRect.top - frame.originClientTop) / frame.scaleY + paddingTop + borderTop;
+            headingTops.set(section.start.line, firstLineTop);
+            visible.set(section.start.line, firstLineTop + lineHeight / 2);
             labels.set(section.start.line,
                 heading.getAttribute("data-heading") ?? heading.textContent.trim()
             );
@@ -311,6 +335,7 @@ class ReadingGraph {
             endLine,
             activeLine,
             visible,
+            headingTops,
             folds,
             labels,
             filenameY: measureFilename(sizer, frame.originClientTop, frame.scaleY),
@@ -327,9 +352,15 @@ class ReadingGraph {
         this.resize.disconnect();
         this.scroller.removeEventListener("scroll", this.onScroll);
         this.scroller.removeEventListener("click", this.onClick);
+        let remeasure = false;
+        for (const { section, proseClass } of this.sectionByElement.values()) {
+            if (setProseClass(section, proseClass, null)) remeasure = true;
+        }
+        this.sectionByElement.clear();
         this.layer.destroy();
         this.unbindPalette();
         this.host.classList.remove("hbg-reading");
+        if (remeasure && this.isReading() && this.host.isConnected) this.view.previewMode?.renderer?.queueRender?.();
     }
 }
 
@@ -374,7 +405,11 @@ function registerReading(plugin) {
     }
     plugin.registerMarkdownPostProcessor((_element, context) => {
         for (const [view, instance] of instances) {
-            if (view.file?.path === context.sourcePath) instance.schedule();
+            if (view.file?.path !== context.sourcePath || !instance.isReading()) continue;
+            // Assign the section width before the native reader measures it.
+            const renderer = view.previewMode?.renderer;
+            if (renderer) instance.updateSourceCache(renderer);
+            instance.schedule();
         }
     });
     plugin.register(() => {

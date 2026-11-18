@@ -74,12 +74,16 @@ function headingAt(ordered, line) {
     return ordered[Math.max(0, low - 1)];
 }
 
-function forkGeometry(fromLevel, level, y, previousY, step) {
+function forkGeometry(fromLevel, level, y, previousY, step, headingTop) {
     const span = (level - fromLevel) * step;
     const desiredRise = 10 + Math.min(38, 16 + span * 0.6);
-    const rise = Number.isFinite(previousY)
-        ? Math.min(desiredRise, Math.max(0, y - previousY - 4))
-        : desiredRise;
+    // A fork across several lanes could pass through the preceding paragraph.
+    // Keep its bend inside the new heading's first line in that case.
+    const startLimit = Math.max(
+        Number.isFinite(previousY) ? previousY + 4 : -Infinity,
+        headingTop ?? -Infinity
+    );
+    const rise = Math.min(desiredRise, Math.max(0, y - startLimit));
     const start = y - rise;
     const landing = y - Math.min(10, rise * 0.41);
     const handle = (landing - start) * 0.54;
@@ -362,7 +366,9 @@ class GraphLayer {
             if (Number.isFinite(y) && node.level !== fromLevel) {
                 const previous = ordered[node.index - 1];
                 const previousY = previous ? visible.get(previous.line) : originY;
-                segment = forkGeometry(fromLevel, node.level, y, previousY, step);
+                const crossesProse = node.level - (previous?.level ?? 1) >= 2;
+                const headingTop = crossesProse ? args.headingTops.get(node.line) : undefined;
+                segment = forkGeometry(fromLevel, node.level, y, previousY, step, headingTop);
             }
             forks.set(node, segment);
             return segment;
